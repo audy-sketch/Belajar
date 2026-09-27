@@ -1,0 +1,603 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Cuaca Hatiku Hari Ini</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700;12..96,800&family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!--
+  =====================================================================
+  PENGATURAN
+  =====================================================================
+  1) MODE DEMO (bawaan): FIREBASE_CONFIG = null
+     Buka file ini di browser (laptop). Pada slide interaktif, tekan
+     "Buka layar siswa (demo)" — tab baru berperan sebagai HP siswa.
+     Semua berjalan di satu perangkat, tanpa internet, untuk mencoba alur.
+
+  2) MODE KELAS: isi FIREBASE_CONFIG dengan konfigurasi proyek Firebase
+     (Realtime Database), lalu hosting file ini (Firebase Hosting / GitHub
+     Pages / Netlify). QR code di slide akan mengarah ke halaman siswa.
+  =====================================================================
+-->
+<script>
+  const FIREBASE_CONFIG = {
+    apiKey: "AIzaSyDV8vR3lq9xEr8mR8kgV_DU-J9h6CxVOOI",
+    authDomain: "belajar-ca738.firebaseapp.com",
+    // Alamat database: salin dari halaman Realtime Database jika berbeda
+    databaseURL: "https://belajar-ca738-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "belajar-ca738",
+    storageBucket: "belajar-ca738.firebasestorage.app",
+    messagingSenderId: "1004811139668",
+    appId: "1:1004811139668:web:7c6bfbe47a4d7f90f94bc1"
+  };
+
+  // Alamat halaman siswa di internet (isi setelah diunggah ke Netlify),
+  // contoh: "https://barometer-kanisius.netlify.app/"
+  // Jika dikosongkan, QR memakai alamat tempat presentasi ini dibuka.
+  const ALAMAT_SISWA = "";
+  /* Contoh isi:
+  const FIREBASE_CONFIG = {
+    apiKey: "...",
+    authDomain: "nama-proyek.firebaseapp.com",
+    databaseURL: "https://nama-proyek-default-rtdb.asia-southeast1.firebasedatabase.app",
+    projectId: "nama-proyek",
+    appId: "..."
+  };
+  */
+
+  // Daftar slide. Untuk slide hasil ekspor PowerPoint, gunakan:
+  //   { jenis: "gambar", src: "slide1.png" }
+  // Slide interaktif: { jenis: "barometer" }
+  const SLIDES = [
+    { jenis: "html", id: "judul" },
+    { jenis: "html", id: "pengantar" },
+    { jenis: "barometer" },
+    { jenis: "html", id: "refleksi" }
+  ];
+
+  const KELAS = ["8.1", "8.2", "8.3", "8.4", "8.5", "8.6"];
+  const JUMLAH_ABSEN = 36;
+</script>
+<style>
+  :root {
+    --ink: #16233F;
+    --ink-soft: #4A5775;
+    --paper: #F5F8FB;
+    --sky: #DCE7F2;
+    --line: #C9D6E4;
+    --sun: #F2B632;
+    --storm: #3B3F6B;
+    --white: #FFFFFF;
+    --display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+    --body: "Atkinson Hyperlegible", "Segoe UI", system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body { font-family: var(--body); color: var(--ink); background: var(--ink); overflow: hidden; }
+  body.mode-siswa { overflow: auto; background: var(--paper); }
+  button { font: inherit; cursor: pointer; }
+  button:focus-visible, select:focus-visible, input:focus-visible { outline: 3px solid var(--sun); outline-offset: 2px; }
+
+  /* ================= LAYAR GURU (16:9) ================= */
+  #guru { position: fixed; inset: 0; display: grid; place-items: center; }
+  .stage {
+    width: 1920px; height: 1080px; position: absolute; left: 50%; top: 50%;
+    transform-origin: center center; background: var(--paper); overflow: hidden;
+  }
+  .slide { position: absolute; inset: 0; display: none; }
+  .slide.aktif { display: block; }
+  .slide img.penuh { width: 100%; height: 100%; object-fit: contain; }
+
+  /* Slide judul */
+  .s-judul { padding: 150px 160px; display: flex; flex-direction: column; justify-content: space-between; height: 100%; }
+  .s-judul .cuaca-deret { font-size: 150px; display: flex; gap: 60px; line-height: 1; }
+  .s-judul h1 { font-family: var(--display); font-weight: 800; font-size: 190px; line-height: .92; letter-spacing: -.035em; max-width: 1500px; }
+  .s-judul p { font-size: 40px; color: var(--ink-soft); margin-top: 36px; }
+
+  /* Slide teks */
+  .s-teks { padding: 140px 160px; height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 120px; align-items: center; }
+  .s-teks h2 { font-family: var(--display); font-weight: 700; font-size: 104px; line-height: 1; letter-spacing: -.025em; }
+  .s-teks ol, .s-teks ul { list-style: none; display: grid; gap: 44px; }
+  .s-teks li { font-size: 42px; line-height: 1.35; padding-left: 90px; position: relative; }
+  .s-teks ol { counter-reset: n; }
+  .s-teks ol li::before { counter-increment: n; content: counter(n); position: absolute; left: 0; top: -4px; width: 62px; height: 62px; border-radius: 50%; background: var(--ink); color: var(--white); font-family: var(--display); font-weight: 700; font-size: 34px; display: grid; place-items: center; }
+  .s-teks ul li::before { content: ""; position: absolute; left: 14px; top: 20px; width: 26px; height: 26px; border-radius: 50%; background: var(--sun); }
+  .s-teks .catatan { font-size: 34px; color: var(--ink-soft); margin-top: 48px; line-height: 1.4; max-width: 700px; }
+
+  /* Slide barometer */
+  .s-baro { height: 100%; display: grid; grid-template-columns: 520px 1fr; }
+  .baro-kiri { background: var(--ink); color: var(--white); padding: 60px 64px; display: flex; flex-direction: column; gap: 26px; }
+  .baro-kiri h2 { font-family: var(--display); font-weight: 700; font-size: 56px; line-height: 1.02; letter-spacing: -.02em; }
+  .qr-wrap { background: var(--white); border-radius: 28px; padding: 24px; width: 348px; }
+  #qr { width: 300px; height: 300px; }
+  #qr img, #qr canvas { width: 300px !important; height: 300px !important; }
+  .kode { font-size: 30px; color: #C4CEE0; }
+  .kode b { font-family: var(--display); font-size: 64px; color: var(--sun); letter-spacing: .08em; display: block; line-height: 1.1; }
+  .hitung { margin-top: auto; margin-bottom: 70px; font-size: 30px; color: #C4CEE0; }
+  .hitung b { font-family: var(--display); font-size: 88px; color: var(--white); display: block; line-height: 1; }
+  .status-pill { display: inline-block; font-size: 24px; padding: 8px 20px; border-radius: 999px; background: #2E7D5B; color: var(--white); align-self: flex-start; }
+  .status-pill.tutup { background: #8A3B3B; }
+
+  .baro-kanan { padding: 60px 80px 100px; display: flex; flex-direction: column; gap: 22px; }
+  .baris { display: grid; grid-template-columns: 110px 300px 1fr 90px; align-items: center; gap: 20px; min-height: 118px; border-bottom: 2px solid var(--line); }
+  .baris:last-of-type { border-bottom: none; }
+  .baris .ikon { font-size: 84px; line-height: 1; text-align: center; }
+  .baris .nama { font-family: var(--display); font-weight: 700; font-size: 44px; line-height: 1; }
+  .baris .ket { font-size: 24px; color: var(--ink-soft); margin-top: 8px; }
+  .titik-titik { display: flex; flex-wrap: wrap; gap: 10px; align-content: center; }
+  .titik { width: 42px; height: 42px; border-radius: 50%; animation: muncul .45s cubic-bezier(.3,1.6,.5,1); }
+  .baris .jml { font-family: var(--display); font-weight: 800; font-size: 60px; text-align: right; }
+  @keyframes muncul { from { transform: scale(0); } to { transform: scale(1); } }
+
+  .dinding-kata { position: absolute; left: 520px; right: 0; bottom: 0; height: 0; overflow: hidden; background: var(--white); border-top: 2px solid var(--line); transition: height .35s ease; }
+  .dinding-kata.tampil { height: 300px; }
+  .dinding-kata .isi { padding: 30px 80px 90px; display: flex; flex-wrap: wrap; gap: 14px 34px; align-items: baseline; }
+  .dinding-kata .kata { font-family: var(--display); font-weight: 700; line-height: 1.1; }
+  .dinding-kata .kosong { font-size: 30px; color: var(--ink-soft); }
+
+  /* Kontrol guru (di luar stage, ukuran tetap untuk layar sentuh) */
+  .kontrol { position: fixed; left: 16px; right: 16px; bottom: 14px; display: flex; justify-content: space-between; align-items: flex-end; pointer-events: none; z-index: 10; }
+  .kontrol > div { display: flex; gap: 8px; pointer-events: auto; flex-wrap: wrap; justify-content: flex-end; }
+  .kbtn { background: rgba(22,35,63,.88); color: var(--white); border: 1px solid rgba(255,255,255,.18); border-radius: 12px; padding: 10px 16px; font-size: 15px; min-height: 44px; }
+  .kbtn:hover { background: var(--ink); }
+  .kbtn.nav { font-size: 20px; min-width: 52px; }
+  .kbtn.utama { background: var(--sun); color: var(--ink); border-color: var(--sun); font-weight: 700; }
+  .nomor-slide { color: var(--white); background: rgba(22,35,63,.88); border-radius: 12px; padding: 12px 14px; font-size: 15px; }
+  .alat-baro { display: none !important; }
+  body.di-baro .alat-baro { display: flex !important; }
+
+  .banner-demo { position: fixed; top: 12px; left: 50%; transform: translateX(-50%); background: var(--sun); color: var(--ink); font-size: 14px; padding: 6px 14px; border-radius: 999px; z-index: 11; font-weight: 700; }
+
+  /* ================= LAYAR SISWA (HP) ================= */
+  #siswa { display: none; max-width: 480px; margin: 0 auto; padding: calc(env(safe-area-inset-top, 0px) + 20px) 20px calc(env(safe-area-inset-bottom, 0px) + 28px); min-height: 100%; }
+  body.mode-siswa #siswa { display: block; }
+  body.mode-siswa #guru, body.mode-siswa .kontrol, body.mode-siswa .banner-demo { display: none; }
+  .s-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 18px; font-size: 14px; color: var(--ink-soft); }
+  .s-head b { color: var(--ink); }
+  #siswa h1 { font-family: var(--display); font-weight: 800; font-size: 34px; line-height: 1.02; letter-spacing: -.02em; margin-bottom: 18px; }
+  .identitas { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 22px; }
+  .identitas label { font-size: 14px; color: var(--ink-soft); display: grid; gap: 6px; }
+  select, input[type=text] { font: inherit; font-size: 18px; padding: 12px; border: 2px solid var(--line); border-radius: 12px; background: var(--white); color: var(--ink); width: 100%; }
+  .tanya { display: block; font-weight: 700; font-size: 17px; margin-bottom: 10px; }
+  .pilihan { display: grid; gap: 10px; margin-bottom: 22px; }
+  .pil { display: grid; grid-template-columns: 56px 1fr; align-items: center; gap: 12px; text-align: left; background: var(--white); border: 2px solid var(--line); border-radius: 16px; padding: 10px 14px; color: var(--ink); }
+  .pil .ik { font-size: 38px; line-height: 1; text-align: center; }
+  .pil .nm { font-family: var(--display); font-weight: 700; font-size: 20px; display: block; }
+  .pil .kt { font-size: 14px; color: var(--ink-soft); }
+  .pil[aria-pressed=true] { border-color: var(--ink); background: var(--sky); box-shadow: inset 0 0 0 2px var(--ink); }
+  .kirim { width: 100%; margin-top: 18px; background: var(--ink); color: var(--white); border: none; border-radius: 14px; padding: 16px; font-size: 18px; font-weight: 700; }
+  .kirim:disabled { opacity: .4; cursor: not-allowed; }
+  .pesan { margin-top: 14px; font-size: 15px; min-height: 22px; color: #8A3B3B; }
+  .terkirim { display: none; text-align: center; padding-top: 40px; }
+  .terkirim .besar { font-size: 96px; line-height: 1; }
+  .terkirim h2 { font-family: var(--display); font-size: 28px; margin: 16px 0 8px; }
+  .terkirim p { color: var(--ink-soft); font-size: 16px; line-height: 1.5; }
+  .terkirim button { margin-top: 24px; background: none; border: 2px solid var(--ink); border-radius: 12px; padding: 12px 20px; color: var(--ink); font-weight: 700; }
+  .ditutup { display: none; text-align: center; padding: 60px 10px; font-size: 18px; line-height: 1.5; color: var(--ink-soft); }
+  .ditutup b { display: block; font-family: var(--display); font-size: 26px; color: var(--ink); margin-bottom: 8px; }
+
+  @media (prefers-reduced-motion: reduce) {
+    .titik { animation: none; }
+    .dinding-kata { transition: none; }
+  }
+</style>
+</head>
+<body>
+
+<!-- ================= LAYAR GURU ================= -->
+<div id="guru">
+  <div class="stage" id="stage">
+
+    <section class="slide" data-id="judul">
+      <div class="s-judul">
+        <div class="cuaca-deret" aria-hidden="true">☀️ ⛅ ☁️ 🌧️ ⛈️</div>
+        <div>
+          <h1>Cuaca hatiku hari ini</h1>
+          <p>PPKn Kelas VIII, sapaan awal pertemuan</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide" data-id="pengantar">
+      <div class="s-teks">
+        <div>
+          <h2>Setiap perasaan boleh hadir di kelas ini</h2>
+          <p class="catatan">Tidak ada jawaban benar atau salah. Papan hanya menampilkan jumlah dan kata, tanpa nama.</p>
+        </div>
+        <ol>
+          <li>Siapkan HP-mu, lalu pindai kode QR di slide berikutnya.</li>
+          <li>Pilih kelas dan nomor absenmu.</li>
+          <li>Pilih cuaca yang paling mirip dengan perasaanmu saat ini.</li>
+          <li>Tulis satu kata untuk perasaanmu, lalu kirim.</li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="slide" data-id="barometer">
+      <div class="s-baro">
+        <div class="baro-kiri">
+          <h2>Bagaimana cuaca hatimu pagi ini?</h2>
+          <div class="qr-wrap"><div id="qr"></div></div>
+          <div class="kode">Kode sesi<b id="kodeSesi">----</b></div>
+          <span class="status-pill" id="statusPill">Menerima jawaban</span>
+          <div class="hitung"><b id="jmlMasuk">0</b>siswa sudah mengirim</div>
+        </div>
+        <div class="baro-kanan" id="baroKanan"></div>
+      </div>
+      <div class="dinding-kata" id="dindingKata"><div class="isi" id="isiKata"></div></div>
+    </section>
+
+    <section class="slide" data-id="refleksi">
+      <div class="s-teks">
+        <h2>Membaca cuaca kelas kita</h2>
+        <ul>
+          <li>Cuaca apa yang paling banyak muncul hari ini? Apa kira-kira sebabnya?</li>
+          <li>Kalau ada teman yang sedang hujan atau badai, apa yang bisa kita lakukan di kelas?</li>
+          <li>Bagaimana sikap saling menghargai perasaan berkaitan dengan sila kedua Pancasila?</li>
+        </ul>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div class="kontrol">
+  <div>
+    <button class="kbtn nav" id="btnPrev" aria-label="Slide sebelumnya">‹</button>
+    <button class="kbtn nav" id="btnNext" aria-label="Slide berikutnya">›</button>
+    <span class="nomor-slide" id="nomorSlide">1 / 4</span>
+    <button class="kbtn" id="btnFull">Layar penuh</button>
+  </div>
+  <div class="alat-baro">
+    <button class="kbtn utama" id="btnDemoSiswa">Buka layar siswa (demo)</button>
+    <button class="kbtn" id="btnSimulasi">Simulasi 30 siswa</button>
+    <button class="kbtn" id="btnKata">Tampilkan kata</button>
+    <button class="kbtn" id="btnBuka">Tutup jawaban</button>
+    <button class="kbtn" id="btnReset">Kosongkan</button>
+  </div>
+</div>
+<div class="banner-demo" id="bannerDemo" hidden>Mode demo: coba di satu perangkat</div>
+
+<!-- ================= LAYAR SISWA ================= -->
+<main id="siswa">
+  <div class="s-head"><span>Sesi <b id="sKode">----</b></span><span id="sMode"></span></div>
+
+  <div id="formSiswa">
+    <h1>Bagaimana cuaca hatimu pagi ini?</h1>
+    <div class="identitas">
+      <label>Kelas<select id="sKelas"></select></label>
+      <label>Nomor absen<select id="sAbsen"></select></label>
+    </div>
+    <p class="tanya">Pilih yang paling mirip dengan perasaanmu</p>
+    <div class="pilihan" id="sPilihan" role="group" aria-label="Pilihan cuaca hati"></div>
+    <label class="tanya" for="sKata">Satu kata untuk perasaanmu</label>
+    <input type="text" id="sKata" maxlength="20" placeholder="misalnya: ngantuk" autocomplete="off">
+    <button class="kirim" id="sKirim" disabled>Kirim</button>
+    <p class="pesan" id="sPesan" role="status"></p>
+  </div>
+
+  <div class="terkirim" id="sTerkirim">
+    <div class="besar" id="sIkonTerkirim">☀️</div>
+    <h2>Terkirim</h2>
+    <p>Cuaca hatimu sudah muncul di papan kelas, tanpa nama. Terima kasih sudah jujur.</p>
+    <button id="sUbah">Ubah jawaban</button>
+  </div>
+
+  <div class="ditutup" id="sDitutup"><b>Jawaban sedang ditutup</b>Tunggu aba-aba dari guru, halaman ini akan terbuka sendiri.</div>
+</main>
+
+<script>
+/* ===================================================================
+   DATA CUACA
+   =================================================================== */
+const CUACA = [
+  { id: 5, ikon: "☀️", nama: "Cerah",         ket: "Senang, bersemangat",  warna: "#F2B632" },
+  { id: 4, ikon: "⛅", nama: "Cerah berawan", ket: "Cukup baik, tenang",   warna: "#7FBF95" },
+  { id: 3, ikon: "☁️", nama: "Mendung",       ket: "Biasa saja, datar",    warna: "#A3AFBF" },
+  { id: 2, ikon: "🌧️", nama: "Hujan",         ket: "Sedih, lelah, kecewa", warna: "#5B84B1" },
+  { id: 1, ikon: "⛈️", nama: "Badai",         ket: "Marah, cemas, kacau",  warna: "#3B3F6B" }
+];
+const cariCuaca = id => CUACA.find(c => c.id === Number(id));
+
+const params = new URLSearchParams(location.search);
+const MODE_SISWA = params.has("siswa");
+const DEMO = !FIREBASE_CONFIG;
+
+/* ===================================================================
+   JALUR DATA: demo (BroadcastChannel) atau Firebase
+   Keduanya punya antarmuka yang sama:
+     kirimJawaban(kode, kunci, data)
+     setStatus(kode, terbuka)
+     dengarJawaban(kode, fn)   -> fn({kunci: data})
+     dengarStatus(kode, fn)    -> fn(terbuka)
+     hapusSemua(kode)
+   =================================================================== */
+function buatJalurDemo() {
+  const ch = new BroadcastChannel("cuaca-hati-demo");
+  let jawaban = {}, terbuka = true, fJawab = null, fStatus = null;
+  const simpanLokal = kode => { try { localStorage.setItem("ch-" + kode, JSON.stringify({ jawaban, terbuka })); } catch (e) {} };
+  ch.onmessage = ({ data: m }) => {
+    if (m.jenis === "jawab" && fJawab) { jawaban[m.kunci] = m.data; simpanLokal(m.kode); fJawab({ ...jawaban }); }
+    if (m.jenis === "status" && fStatus) fStatus(m.terbuka);
+    if (m.jenis === "tanyaStatus" && fJawab) ch.postMessage({ jenis: "status", terbuka });
+  };
+  return {
+    kirimJawaban: (kode, kunci, data) => {
+      if (fJawab) { jawaban[kunci] = data; simpanLokal(kode); fJawab({ ...jawaban }); } // dipanggil dari layar guru (simulasi)
+      else ch.postMessage({ jenis: "jawab", kode, kunci, data });
+      return Promise.resolve();
+    },
+    setStatus: (kode, t) => { terbuka = t; simpanLokal(kode); ch.postMessage({ jenis: "status", terbuka: t }); },
+    dengarJawaban: (kode, fn) => {
+      fJawab = fn;
+      try { const s = JSON.parse(localStorage.getItem("ch-" + kode)); if (s) { jawaban = s.jawaban || {}; terbuka = s.terbuka !== false; } } catch (e) {}
+      fn({ ...jawaban });
+    },
+    dengarStatus: (kode, fn) => { fStatus = fn; ch.postMessage({ jenis: "tanyaStatus" }); },
+    statusAwal: () => terbuka,
+    hapusSemua: kode => { jawaban = {}; simpanLokal(kode); fJawab && fJawab({}); }
+  };
+}
+
+function buatJalurFirebase() {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  const db = firebase.database();
+  const ref = kode => db.ref("sesi/" + kode);
+  return {
+    kirimJawaban: (kode, kunci, data) => ref(kode).child("jawaban/" + kunci).set(data),
+    setStatus: (kode, t) => ref(kode).child("terbuka").set(t),
+    dengarJawaban: (kode, fn) => ref(kode).child("jawaban").on("value", s => fn(s.val() || {})),
+    dengarStatus: (kode, fn) => ref(kode).child("terbuka").on("value", s => fn(s.val() !== false)),
+    statusAwal: () => true,
+    hapusSemua: kode => ref(kode).child("jawaban").remove(),
+    dengarKoneksi: fn => db.ref(".info/connected").on("value", s => fn(s.val() === true))
+  };
+}
+
+function tandaKoneksi(teks, warna) {
+  const b = document.getElementById("bannerDemo");
+  b.textContent = teks; b.hidden = false; b.dataset.warna = warna;
+  b.style.background = { hijau: "#2E7D5B", kuning: "#F2B632", merah: "#8A3B3B" }[warna];
+  b.style.color = warna === "kuning" ? "#16233F" : "#FFFFFF";
+}
+
+function muatFirebase() {
+  const src = [
+    "https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js",
+    "https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"
+  ];
+  return src.reduce((p, s) => p.then(() => new Promise((ok, gagal) => {
+    const el = document.createElement("script"); el.src = s; el.onload = ok; el.onerror = gagal; document.head.appendChild(el);
+  })), Promise.resolve());
+}
+
+/* ===================================================================
+   LAYAR GURU
+   =================================================================== */
+function mulaiGuru(jalur) {
+  let kode = sessionStorage.getItem("ch-kode");
+  if (!kode) { kode = String(Math.floor(1000 + Math.random() * 9000)); sessionStorage.setItem("ch-kode", kode); }
+  document.getElementById("kodeSesi").textContent = kode;
+  if (DEMO) document.getElementById("bannerDemo").hidden = false;
+  else if (jalur.dengarKoneksi) {
+    let pernah = false;
+    tandaKoneksi("Menyambung ke Firebase...", "kuning");
+    jalur.dengarKoneksi(ok => {
+      if (ok) { pernah = true; tandaKoneksi("Tersambung", "hijau"); setTimeout(() => { const b = document.getElementById("bannerDemo"); if (b.dataset.warna === "hijau") b.hidden = true; }, 3000); }
+      else if (pernah) tandaKoneksi("Koneksi terputus, menyambung ulang...", "merah");
+    });
+    setTimeout(() => { if (!pernah) tandaKoneksi("Belum tersambung ke Firebase. Periksa internet dan alamat database (databaseURL).", "merah"); }, 10000);
+  }
+  else document.getElementById("btnDemoSiswa").textContent = "Buka layar siswa";
+
+  // Susun slide
+  const stage = document.getElementById("stage");
+  const slideEl = SLIDES.map(s => {
+    if (s.jenis === "gambar") {
+      const sec = document.createElement("section"); sec.className = "slide";
+      sec.innerHTML = '<img class="penuh" alt="">'; sec.querySelector("img").src = s.src;
+      stage.appendChild(sec); return sec;
+    }
+    return stage.querySelector('.slide[data-id="' + (s.jenis === "barometer" ? "barometer" : s.id) + '"]');
+  });
+  let idx = 0;
+  function tampil(i) {
+    idx = Math.max(0, Math.min(slideEl.length - 1, i));
+    slideEl.forEach((el, n) => el && el.classList.toggle("aktif", n === idx));
+    document.getElementById("nomorSlide").textContent = (idx + 1) + " / " + slideEl.length;
+    document.body.classList.toggle("di-baro", SLIDES[idx].jenis === "barometer");
+  }
+  document.getElementById("btnPrev").onclick = () => tampil(idx - 1);
+  document.getElementById("btnNext").onclick = () => tampil(idx + 1);
+  document.addEventListener("keydown", e => {
+    if (["ArrowRight", "PageDown", " "].includes(e.key)) { e.preventDefault(); tampil(idx + 1); }
+    if (["ArrowLeft", "PageUp"].includes(e.key)) { e.preventDefault(); tampil(idx - 1); }
+    if (e.key.toLowerCase() === "f") layarPenuh();
+  });
+  function layarPenuh() {
+    if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.();
+  }
+  document.getElementById("btnFull").onclick = layarPenuh;
+
+  // Skala 1920x1080 ke layar
+  function skala() {
+    const k = Math.min(innerWidth / 1920, innerHeight / 1080);
+    stage.style.transform = "translate(-50%, -50%) scale(" + k + ")";
+  }
+  addEventListener("resize", skala); skala();
+
+  // QR code menuju halaman siswa
+  const dasar = (ALAMAT_SISWA || location.href.split(/[?#]/)[0]);
+  const alamatSiswa = dasar + (dasar.includes("?") ? "&" : "?") + "siswa&s=" + kode;
+  if (!DEMO && !ALAMAT_SISWA && location.protocol === "file:") {
+    tandaKoneksi("QR belum bisa dibuka HP: isi ALAMAT_SISWA atau buka presentasi dari alamat Netlify", "merah");
+  }
+  if (typeof QRCode !== "undefined") {
+    new QRCode(document.getElementById("qr"), { text: alamatSiswa, width: 300, height: 300, colorDark: "#16233F", colorLight: "#FFFFFF" });
+  } else {
+    document.getElementById("qr").innerHTML = '<p style="font-size:24px;color:#4A5775;padding:40px 10px;text-align:center">Kode QR muncul saat perangkat tersambung ke internet.</p>';
+  }
+  document.getElementById("btnDemoSiswa").onclick = () => window.open(alamatSiswa, "_blank");
+
+  // Barometer
+  const kanan = document.getElementById("baroKanan");
+  kanan.innerHTML = CUACA.map(c =>
+    '<div class="baris" data-cuaca="' + c.id + '">' +
+      '<div class="ikon" aria-hidden="true">' + c.ikon + '</div>' +
+      '<div><div class="nama">' + c.nama + '</div><div class="ket">' + c.ket + '</div></div>' +
+      '<div class="titik-titik"></div>' +
+      '<div class="jml">0</div>' +
+    '</div>').join("");
+
+  function render(semua) {
+    const daftar = Object.values(semua);
+    document.getElementById("jmlMasuk").textContent = daftar.length;
+    CUACA.forEach(c => {
+      const baris = kanan.querySelector('[data-cuaca="' + c.id + '"]');
+      const n = daftar.filter(j => Number(j.cuaca) === c.id).length;
+      const wadah = baris.querySelector(".titik-titik");
+      while (wadah.children.length < n) { const t = document.createElement("span"); t.className = "titik"; t.style.background = c.warna; wadah.appendChild(t); }
+      while (wadah.children.length > n) wadah.lastChild.remove();
+      baris.querySelector(".jml").textContent = n;
+    });
+    // Dinding kata: ukuran sesuai frekuensi
+    const hitung = {};
+    daftar.forEach(j => {
+      const k = (j.kata || "").trim().toLowerCase(); if (!k) return;
+      hitung[k] = hitung[k] || { n: 0, cuaca: j.cuaca }; hitung[k].n++; hitung[k].cuaca = j.cuaca;
+    });
+    const isi = document.getElementById("isiKata"); isi.innerHTML = "";
+    const kata = Object.entries(hitung).sort((a, b) => b[1].n - a[1].n);
+    if (!kata.length) { isi.innerHTML = '<span class="kosong">Kata-kata perasaan akan muncul di sini.</span>'; return; }
+    kata.forEach(([k, v]) => {
+      const s = document.createElement("span"); s.className = "kata";
+      s.textContent = k; s.style.fontSize = Math.min(30 + v.n * 9, 72) + "px";
+      const c = cariCuaca(v.cuaca); s.style.color = c && c.id >= 3 ? "#16233F" : (c ? c.warna : "#16233F");
+      if (c && c.id === 5) s.style.color = "#B7810E";
+      isi.appendChild(s);
+    });
+  }
+  jalur.dengarJawaban(kode, render);
+
+  // Buka/tutup
+  let terbuka = jalur.statusAwal();
+  const btnBuka = document.getElementById("btnBuka"), pill = document.getElementById("statusPill");
+  function aturStatus(t) {
+    terbuka = t; jalur.setStatus(kode, t);
+    btnBuka.textContent = t ? "Tutup jawaban" : "Buka jawaban";
+    pill.textContent = t ? "Menerima jawaban" : "Jawaban ditutup";
+    pill.classList.toggle("tutup", !t);
+  }
+  aturStatus(terbuka);
+  btnBuka.onclick = () => aturStatus(!terbuka);
+
+  document.getElementById("btnKata").onclick = e => {
+    const d = document.getElementById("dindingKata"); d.classList.toggle("tampil");
+    e.target.textContent = d.classList.contains("tampil") ? "Sembunyikan kata" : "Tampilkan kata";
+  };
+  document.getElementById("btnReset").onclick = () => {
+    if (confirm("Kosongkan semua jawaban di sesi ini?")) jalur.hapusSemua(kode);
+  };
+
+  // Simulasi: 30 siswa mengirim satu per satu (hanya untuk mencoba tampilan)
+  const contohKata = { 5: ["senang", "semangat", "lega", "gembira"], 4: ["tenang", "oke", "santai", "baik"], 3: ["biasa", "ngantuk", "datar"], 2: ["capek", "sedih", "lelah", "ngantuk"], 1: ["cemas", "kesal", "bingung"] };
+  document.getElementById("btnSimulasi").onclick = () => {
+    const bobot = [5, 5, 5, 5, 4, 4, 4, 4, 4, 3, 3, 3, 3, 2, 2, 1];
+    let i = 0;
+    const t = setInterval(() => {
+      if (i >= 30) return clearInterval(t);
+      const c = bobot[Math.floor(Math.random() * bobot.length)];
+      const kt = contohKata[c][Math.floor(Math.random() * contohKata[c].length)];
+      const kunci = "SIM-" + String(i + 1).padStart(2, "0");
+      jalur.kirimJawaban(kode, kunci, { cuaca: c, kata: kt, waktu: Date.now() });
+      i++;
+    }, 180);
+  };
+
+  tampil(0);
+}
+
+/* ===================================================================
+   LAYAR SISWA
+   =================================================================== */
+function mulaiSiswa(jalur) {
+  document.body.classList.add("mode-siswa");
+  const kode = params.get("s") || "";
+  document.getElementById("sKode").textContent = kode || "-";
+  document.getElementById("sMode").textContent = DEMO ? "mode demo" : "";
+
+  const selKelas = document.getElementById("sKelas"), selAbsen = document.getElementById("sAbsen");
+  selKelas.innerHTML = '<option value="">Pilih</option>' + KELAS.map(k => "<option>" + k + "</option>").join("");
+  selAbsen.innerHTML = '<option value="">Pilih</option>' + Array.from({ length: JUMLAH_ABSEN }, (_, i) => "<option>" + (i + 1) + "</option>").join("");
+
+  // Ingat identitas di HP ini
+  try { const id = JSON.parse(localStorage.getItem("ch-identitas")); if (id) { selKelas.value = id.kelas; selAbsen.value = id.absen; } } catch (e) {}
+
+  let pilihan = null;
+  const wadah = document.getElementById("sPilihan");
+  wadah.innerHTML = CUACA.map(c =>
+    '<button class="pil" type="button" aria-pressed="false" data-id="' + c.id + '">' +
+      '<span class="ik" aria-hidden="true">' + c.ikon + '</span>' +
+      '<span><span class="nm">' + c.nama + '</span><span class="kt">' + c.ket + '</span></span></button>').join("");
+  wadah.querySelectorAll(".pil").forEach(b => b.onclick = () => {
+    pilihan = Number(b.dataset.id);
+    wadah.querySelectorAll(".pil").forEach(x => x.setAttribute("aria-pressed", x === b));
+    cekSiap();
+  });
+
+  const btn = document.getElementById("sKirim"), pesan = document.getElementById("sPesan");
+  const cekSiap = () => { btn.disabled = !(selKelas.value && selAbsen.value && pilihan); };
+  selKelas.onchange = selAbsen.onchange = cekSiap; cekSiap();
+
+  const form = document.getElementById("formSiswa"), ok = document.getElementById("sTerkirim"), tutup = document.getElementById("sDitutup");
+  let terbuka = true, sudahKirim = false;
+  function tampilkan() {
+    form.style.display = terbuka && !sudahKirim ? "block" : "none";
+    ok.style.display = sudahKirim ? "block" : "none";
+    tutup.style.display = !terbuka && !sudahKirim ? "block" : "none";
+  }
+  jalur.dengarStatus(kode, t => { terbuka = t; tampilkan(); });
+
+  btn.onclick = async () => {
+    if (!terbuka) { pesan.textContent = "Jawaban sedang ditutup oleh guru."; return; }
+    btn.disabled = true; pesan.textContent = "";
+    const kelas = selKelas.value, absen = selAbsen.value;
+    const kunci = kelas.replace(".", "-") + "_" + String(absen).padStart(2, "0");
+    try {
+      const kirim = jalur.kirimJawaban(kode, kunci, { cuaca: pilihan, kata: document.getElementById("sKata").value.trim().slice(0, 20), waktu: Date.now() });
+      await Promise.race([kirim, new Promise((_, gagal) => setTimeout(() => gagal("waktu habis"), 10000))]);
+      localStorage.setItem("ch-identitas", JSON.stringify({ kelas, absen }));
+      document.getElementById("sIkonTerkirim").textContent = cariCuaca(pilihan).ikon;
+      sudahKirim = true; tampilkan();
+    } catch (e) {
+      pesan.textContent = String(e && e.code || e).includes("PERMISSION")
+        ? "Jawaban ditolak server. Beri tahu guru: aturan akses database belum diatur."
+        : "Jawaban belum terkirim. Periksa koneksi internet, lalu tekan Kirim lagi.";
+      btn.disabled = false;
+    }
+  };
+  document.getElementById("sUbah").onclick = () => { sudahKirim = false; tampilkan(); cekSiap(); };
+  tampilkan();
+}
+
+/* ===================================================================
+   MULAI
+   =================================================================== */
+(async function () {
+  let jalur;
+  if (DEMO) jalur = buatJalurDemo();
+  else {
+    try { await muatFirebase(); jalur = buatJalurFirebase(); }
+    catch (e) {
+      if (MODE_SISWA) { document.body.classList.add("mode-siswa"); document.getElementById("formSiswa").innerHTML = '<p class="pesan">Halaman belum bisa tersambung. Periksa koneksi internet HP, lalu muat ulang halaman ini.</p>'; }
+      else tandaKoneksi("Tidak bisa memuat Firebase. Pastikan perangkat tersambung ke internet.", "merah");
+      return;
+    }
+  }
+  MODE_SISWA ? mulaiSiswa(jalur) : mulaiGuru(jalur);
+})();
+</script>
+</body>
+</html>
